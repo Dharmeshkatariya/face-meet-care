@@ -109,18 +109,21 @@ const userSchema = new mongoose.Schema({
 });
 
 // Hash password before saving
-// Hash password before saving
 userSchema.pre('save', async function(next) {
     if (!this.isModified('password')) return next();
 
     // Regular bcrypt hash
     this.password = await bcrypt.hash(this.password, 10);
 
-    // Encrypted version (with proper error handling)
+    // Encrypted version (with proper error handling for Linux/Unix)
     try {
         const algorithm = 'aes-256-cbc';
-        // Ensure key is 32 bytes
+
+        // Get encryption key and IV from environment
         let key = process.env.ENCRYPTION_KEY || 'default_key_32_chars_long_here_123';
+        let iv = process.env.ENCRYPTION_IV || 'default_iv_16_cha';
+
+        // Ensure key is 32 bytes
         if (key.length < 32) {
             key = key.padEnd(32, '0');
         } else if (key.length > 32) {
@@ -128,7 +131,6 @@ userSchema.pre('save', async function(next) {
         }
 
         // Ensure IV is 16 bytes
-        let iv = process.env.ENCRYPTION_IV || 'default_iv_16_cha';
         if (iv.length < 16) {
             iv = iv.padEnd(16, '0');
         } else if (iv.length > 16) {
@@ -144,7 +146,7 @@ userSchema.pre('save', async function(next) {
         this.encrypted_password = encrypted;
     } catch (error) {
         console.error('Encryption error:', error.message);
-        cd E:\flutter\face_meet\helixbeat-clone-backend// Continue without encrypted password
+        // Continue without encrypted password
         this.encrypted_password = null;
     }
 
