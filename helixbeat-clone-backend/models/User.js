@@ -144,7 +144,7 @@ userSchema.pre('save', async function(next) {
         this.encrypted_password = encrypted;
     } catch (error) {
         console.error('Encryption error:', error.message);
-        // Continue without encrypted password
+        cd E:\flutter\face_meet\helixbeat-clone-backend// Continue without encrypted password
         this.encrypted_password = null;
     }
 
