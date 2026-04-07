@@ -1,22 +1,19 @@
+// routes/providerRoutes.js
 const express = require('express');
 const router = express.Router();
+const {
+    getProviderByUserId,
+    getAllProviders,
+    createProvider
+} = require('../controllers/providerController');
 
 // Get all providers
-router.get('/', (req, res) => {
-    res.json({
-        status: true,
-        message: 'Provider routes working',
-        data: []
-    });
-});
+router.get('/', getAllProviders);
 
-// Get provider by ID
-router.get('/:id', (req, res) => {
-    res.json({
-        status: true,
-        message: 'Get provider by ID',
-        id: req.params.id
-    });
-});
+// Get provider by user ID
+router.get('/:userId', getProviderByUserId);
+
+// Create provider
+router.post('/', createProvider);
 
 module.exports = router;
