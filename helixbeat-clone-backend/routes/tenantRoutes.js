@@ -1,10 +1,21 @@
-
 const express = require('express');
 const router = express.Router();
-const { getCurrentTenant, createTenant } = require('../controllers/tenantController');
-const { protect } = require('../middleware/auth');
 
-router.get('/current-tenant', getCurrentTenant);
-router.post('/tenants', protect, createTenant); // Admin only
+// Get tenant info
+router.get('/', (req, res) => {
+    res.json({
+        status: true,
+        message: 'Tenant routes working'
+    });
+});
+
+// Get tenant by ID
+router.get('/:id', (req, res) => {
+    res.json({
+        status: true,
+        message: 'Get tenant by ID',
+        id: req.params.id
+    });
+});
 
 module.exports = router;

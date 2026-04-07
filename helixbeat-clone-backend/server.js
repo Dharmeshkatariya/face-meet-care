@@ -1,4 +1,4 @@
-// server.js - Updated with proper CORS configuration
+// server.js - Updated imports
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -9,81 +9,45 @@ require('dotenv').config();
 
 const app = express();
 
-// ========== CORS CONFIGURATION - MUST BE FIRST ==========
-// Option 1: Allow all origins (for development)
+// CORS Configuration
 app.use(cors({
-    origin: '*',  // Allow all origins
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin',
-                    'sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
     credentials: true,
-    preflightContinue: false,
     optionsSuccessStatus: 200
 }));
 
-// Handle preflight OPTIONS requests
 app.options('*', cors());
 
-// OR Option 2: Allow specific origins (more secure)
-// const allowedOrigins = [
-//     'http://localhost:3000',
-//     'http://localhost:58857',
-//     'http://127.0.0.1:58857',
-//     'https://your-flutter-app.onrender.com'
-// ];
-//
-// app.use(cors({
-//     origin: function(origin, callback) {
-//         if (!origin) return callback(null, true);
-//         if (allowedOrigins.indexOf(origin) === -1) {
-//             const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-//             return callback(new Error(msg), false);
-//         }
-//         return callback(null, true);
-//     },
-//     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-//     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-//     credentials: true,
-//     optionsSuccessStatus: 200
-// }));
-
-// ========== Other Middleware ==========
+// Middleware
 app.use(helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" } // Allow cross-origin
+    crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 app.use(compression());
-
-// Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Logging
 if (process.env.NODE_ENV === 'development') {
     app.use(morgan('dev'));
 }
 
-// ========== Import Routes ==========
+// Import Routes - Make sure these files exist and are correct
 const authRoutes = require('./routes/authRoutes');
 const tenantRoutes = require('./routes/tenantRoutes');
-const featureSwitchRoutes = require('./routes/featureSwitchRoutes');
 const providerRoutes = require('./routes/providerRoutes');
 const lookupRoutes = require('./routes/lookupRoutes');
-const roleRoutes = require('./routes/roleRoutes');
-const subscriptionRoutes = require('./routes/subscriptionRoutes');
 const stateRoutes = require('./routes/stateRoutes');
 
-// ========== API Routes ==========
+// API Routes
 const apiVersion = process.env.API_VERSION || 'v1';
 app.use(`/api/${apiVersion}/auth`, authRoutes);
 app.use(`/api/${apiVersion}/tenant`, tenantRoutes);
-app.use(`/api/${apiVersion}/feature-switches`, featureSwitchRoutes);
-app.use(`/api/${apiVersion}/provider-details`, providerRoutes);
+app.use(`/api/${apiVersion}/providers`, providerRoutes);
 app.use(`/api/${apiVersion}/lookups`, lookupRoutes);
-app.use(`/api/${apiVersion}/users`, roleRoutes);
-app.use(`/api/${apiVersion}`, subscriptionRoutes);
-app.use(`/api/${apiVersion}`, stateRoutes);
+app.use(`/api/${apiVersion}/states`, stateRoutes);
 
-// ========== Health Check ==========
+// Health Check
 app.get('/health', (req, res) => {
     res.json({
         status: 'OK',
@@ -94,85 +58,50 @@ app.get('/health', (req, res) => {
     });
 });
 
-// ========== Root Endpoint ==========
+// Root endpoint
 app.get('/', (req, res) => {
     res.json({
-        name: process.env.APP_NAME || 'Resido API',
+        name: 'Resido API',
         version: apiVersion,
         status: 'running',
-        cors: 'enabled'
+        endpoints: {
+            health: '/health',
+            login: `/api/${apiVersion}/auth/login`
+        }
     });
 });
 
-// ========== 404 Handler ==========
+// 404 Handler
 app.use((req, res) => {
     res.status(404).json({
         status: false,
-        message: `Route not found: ${req.method} ${req.originalUrl}`,
-        timestamp: new Date().toISOString()
+        message: `Route not found: ${req.method} ${req.originalUrl}`
     });
 });
 
-// ========== Global Error Handler ==========
+// Error Handler
 app.use((err, req, res, next) => {
-    console.error('Error:', {
-        message: err.message,
-        stack: err.stack,
-        url: req.url,
-        method: req.method,
-        ip: req.ip
-    });
-
+    console.error('Error:', err.message);
     res.status(err.status || 500).json({
         status: false,
-        message: err.message || 'Internal server error',
-        ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
-        timestamp: new Date().toISOString()
+        message: err.message || 'Internal server error'
     });
 });
 
-// ========== Database Connection ==========
+// Database connection
 const connectDB = async () => {
     try {
-        await mongoose.connect(process.env.MONGODB_URI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-            serverSelectionTimeoutMS: 5000,
-            socketTimeoutMS: 45000,
-        });
-        console.log('✅ Connected to MongoDB Atlas');
+        await mongoose.connect(process.env.MONGODB_URI);
+        console.log('✅ MongoDB Connected');
 
         const PORT = process.env.PORT || 3000;
         app.listen(PORT, () => {
             console.log(`🚀 Server running on port ${PORT}`);
-            console.log(`📝 API URL: http://localhost:${PORT}/api/${apiVersion}`);
-            console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
-            console.log(`🔧 CORS: Enabled for all origins`);
         });
     } catch (err) {
         console.error('❌ MongoDB connection error:', err.message);
         process.exit(1);
     }
 };
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-    console.error('Unhandled Rejection:', err);
-    if (process.env.NODE_ENV === 'production') {
-        console.error('Continuing despite unhandled rejection');
-    } else {
-        process.exit(1);
-    }
-});
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception:', err);
-    if (process.env.NODE_ENV === 'production') {
-        console.error('Continuing despite uncaught exception');
-    } else {
-        process.exit(1);
-    }
-});
 
 connectDB();

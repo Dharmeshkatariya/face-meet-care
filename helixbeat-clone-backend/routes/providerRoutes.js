@@ -1,10 +1,22 @@
 const express = require('express');
 const router = express.Router();
-const { getFeatureSwitches, createFeatureSwitch, updateFeatureSwitch } = require('../controllers/featureSwitchController');
-const { protect, setTenant } = require('../middleware/auth');
 
-router.get('/', setTenant, getFeatureSwitches);
-router.post('/', protect, createFeatureSwitch);
-router.put('/:id', protect, updateFeatureSwitch);
+// Get all providers
+router.get('/', (req, res) => {
+    res.json({
+        status: true,
+        message: 'Provider routes working',
+        data: []
+    });
+});
+
+// Get provider by ID
+router.get('/:id', (req, res) => {
+    res.json({
+        status: true,
+        message: 'Get provider by ID',
+        id: req.params.id
+    });
+});
 
 module.exports = router;

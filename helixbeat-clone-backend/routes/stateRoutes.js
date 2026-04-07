@@ -1,11 +1,22 @@
-@"
 const express = require('express');
 const router = express.Router();
-const { getStates, createState } = require('../controllers/stateController');
-const { protect, setTenant } = require('../middleware/auth');
 
-router.get('/states', protect, setTenant, getStates);
-router.post('/states', protect, createState);
+// Get all states
+router.get('/', (req, res) => {
+    res.json({ 
+        status: true, 
+        message: 'State routes working',
+        data: []
+    });
+});
+
+// Get state by ID
+router.get('/:id', (req, res) => {
+    res.json({ 
+        status: true, 
+        message: 'Get state by ID',
+        id: req.params.id
+    });
+});
 
 module.exports = router;
-"@ | Out-File -FilePath routes/stateRoutes.js -Encoding utf8
