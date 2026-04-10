@@ -1,10 +1,8 @@
-// services/socketService.js - UPDATED with hardcoded secret
+// services/socketService.js - FIXED for UUID IDs
 const jwt = require('jsonwebtoken');
-const { Message, ChatRoom } = require('../models/Chat');
 const User = require('../models/User');
-const mongoose = require('mongoose');
 
-// ✅ HARDCODE THE SECRET DIRECTLY
+// ✅ HARDCODE THE SECRET
 const JWT_SECRET = 'helixbeat_super_secret_key_2024_123456789';
 
 const activeUsers = new Map();
@@ -14,23 +12,20 @@ const userRooms = new Map();
 const setupSocketHandlers = (io) => {
 
     console.log('═══════════════════════════════════════');
-    console.log('🔐 Socket Service Initialized (PRODUCTION MODE)');
+    console.log('🔐 Socket Service Initialized');
     console.log('JWT_SECRET hardcoded:', JWT_SECRET.substring(0, 20) + '...');
-    console.log('JWT_SECRET length:', JWT_SECRET.length);
     console.log('═══════════════════════════════════════');
 
-    // Authentication middleware - PRODUCTION MODE
+    // Authentication middleware
     io.use(async (socket, next) => {
         try {
             let token = socket.handshake.auth.token ||
                        socket.handshake.headers.authorization;
 
-            console.log('═══════════════════════════════════════');
-            console.log('🔐 Socket Auth Attempt');
-            console.log('Token exists:', !!token);
+            console.log('🔐 Socket Auth - Token exists:', !!token);
 
             if (!token) {
-                console.log('❌ No token provided - Authentication required');
+                console.log('❌ No token provided');
                 return next(new Error('Authentication required'));
             }
 
@@ -38,28 +33,27 @@ const setupSocketHandlers = (io) => {
             console.log('Token preview:', cleanToken.substring(0, 50) + '...');
 
             try {
-                // First decode without verification to see payload
-                const decodedNoVerify = jwt.decode(cleanToken);
-                console.log('Token payload:', JSON.stringify(decodedNoVerify, null, 2));
-
-                // ✅ USE HARDCODED SECRET
+                // Verify JWT
                 const decoded = jwt.verify(cleanToken, JWT_SECRET);
-                console.log('✅ Token verified successfully!');
+                console.log('✅ Token verified!');
+                console.log('Decoded payload:', JSON.stringify(decoded, null, 2));
 
-                // Extract user ID from various possible fields
+                // Extract user ID from various possible fields (UUID format)
                 const userId = decoded.sub || decoded.id || decoded.userId || decoded._id;
 
                 if (!userId) {
-                    console.log('❌ No user ID in token payload');
+                    console.log('❌ No user ID in token');
                     return next(new Error('Invalid token payload'));
                 }
 
-                // Find user in database
+                console.log('Looking for user with ID:', userId);
+
+                // ✅ FIXED: Find user by UUID fields (not ObjectId)
                 const user = await User.findOne({
                     $or: [
-                        { _id: userId },
-                        { id: userId },
-                        { auth_user_id: userId }
+                        { id: userId },           // UUID field
+                        { auth_user_id: userId },  // UUID field
+                        { email: decoded.email }   // Fallback to email
                     ]
                 }).select('-password');
 
@@ -69,16 +63,14 @@ const setupSocketHandlers = (io) => {
                 }
 
                 socket.user = user;
-                socket.userId = user._id.toString();
+                socket.userId = user.id || user.auth_user_id || userId;
 
                 console.log(`✅ Socket authenticated: ${user.name || user.email}`);
-                console.log('═══════════════════════════════════════');
                 next();
 
             } catch (jwtError) {
                 console.error('❌ JWT verification failed:', jwtError.message);
-                console.log('═══════════════════════════════════════');
-                return next(new Error('Invalid token: ' + jwtError.message));
+                return next(new Error('Invalid token'));
             }
 
         } catch (error) {
@@ -91,7 +83,7 @@ const setupSocketHandlers = (io) => {
         const userId = socket.userId;
         const user = socket.user;
 
-        console.log(`✅ User connected: ${user?.name || user?.email || 'Unknown'} - Socket: ${socket.id}`);
+        console.log(`✅ User connected: ${user?.name || user?.email} - Socket: ${socket.id}`);
 
         activeUsers.set(userId, socket.id);
         userSockets.set(socket.id, userId);
@@ -109,13 +101,6 @@ const setupSocketHandlers = (io) => {
                 name: user?.name || 'User',
                 email: user?.email || ''
             },
-            timestamp: new Date().toISOString()
-        });
-
-        // Broadcast online status
-        socket.broadcast.emit('user:online', {
-            userId: userId,
-            name: user?.name || user?.email,
             timestamp: new Date().toISOString()
         });
 
@@ -149,7 +134,6 @@ const setupSocketHandlers = (io) => {
 
             } catch (error) {
                 console.error('Room join error:', error);
-                socket.emit('error', { message: error.message });
             }
         });
 
@@ -175,7 +159,7 @@ const setupSocketHandlers = (io) => {
         socket.on('message:send', async (data) => {
             try {
                 const { roomId, content, type = 'text' } = data;
-                console.log(`💬 Message from ${user?.name || user?.email} in ${roomId}: ${content?.substring(0, 30)}`);
+                console.log(`💬 Message in ${roomId}: ${content?.substring(0, 30)}`);
 
                 // Broadcast to room
                 io.to(roomId).emit('message:new', {
@@ -193,7 +177,6 @@ const setupSocketHandlers = (io) => {
 
             } catch (error) {
                 console.error('Send message error:', error);
-                socket.emit('error', { message: error.message });
             }
         });
 
@@ -202,25 +185,11 @@ const setupSocketHandlers = (io) => {
             console.log(`❌ User disconnected: ${user?.name || user?.email}`);
             activeUsers.delete(userId);
             userSockets.delete(socket.id);
-
-            socket.broadcast.emit('user:offline', {
-                userId: userId,
-                name: user?.name || user?.email,
-                timestamp: new Date().toISOString()
-            });
-
             userRooms.delete(userId);
-        });
-
-        socket.on('error', (error) => {
-            console.error('Socket error:', error);
         });
     });
 
-    console.log('✅ Socket.io handlers initialized (PRODUCTION MODE)');
+    console.log('✅ Socket.io handlers initialized');
 };
 
-module.exports = {
-    setupSocketHandlers,
-    activeUsers
-};
+module.exports = { setupSocketHandlers, activeUsers };
