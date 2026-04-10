@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Auth Test - HelixBeat</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container { max-width: 600px; margin: 0 auto; }
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        input, select, button {
+            margin: 8px 0;
+            padding: 10px;
+            width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover { background: #0056b3; }
+        pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        .success { color: green; }
+        .error { color: red; }
+        .token-box {
+            word-break: break-all;
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        h2 { margin-top: 0; color: #333; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🔐 HelixBeat Auth Test</h1>
+
+    <!-- CONFIG SECTION -->
+    <div class="section">
+        <h2>⚙️ Configuration</h2>
+        <label>Tenant URL (required for register):</label>
+        <input type="text" id="tenant-url" placeholder="e.g., localhost or demo" value="localhost">
+        <small style="color: #666;">This must match a tenant in your database</small>
+    </div>
+
+    <!-- REGISTER SECTION -->
+    <div class="section">
+        <h2>1️⃣ Register User</h2>
+        <input type="text" id="reg-firstname" placeholder="First Name" value="Test">
+        <input type="text" id="reg-lastname" placeholder="Last Name" value="User">
+        <input type="text" id="reg-username" placeholder="Username" value="testuser123">
+        <input type="email" id="reg-email" placeholder="Email" value="test@example.com">
+        <input type="password" id="reg-password" placeholder="Password" value="password123">
+        <button onclick="register()">Register</button>
+        <pre id="register-result"></pre>
+    </div>
+
+    <!-- LOGIN SECTION -->
+    <div class="section">
+        <h2>2️⃣ Login</h2>
+        <input type="email" id="login-email" placeholder="Email" value="test@example.com">
+        <input type="password" id="login-password" placeholder="Password" value="password123">
+        <button onclick="login()">Login</button>
+        <pre id="login-result"></pre>
+    </div>
+
+    <!-- TOKEN SECTION -->
+    <div class="section">
+        <h2>3️⃣ Token Info</h2>
+        <div id="token-info" class="token-box" style="display:none;">
+            <p><strong>Access Token:</strong> <span id="access-token"></span></p>
+            <p><strong>User ID:</strong> <span id="user-id"></span></p>
+            <p><strong>Tenant ID:</strong> <span id="tenant-id"></span></p>
+        </div>
+        <button onclick="copyToken()" id="copy-btn" style="display:none;">📋 Copy Token</button>
+    </div>
+
+    <!-- SOCKET TEST SECTION -->
+    <div class="section">
+        <h2>4️⃣ Socket.io Test</h2>
+        <button onclick="connectSocket()" id="connect-btn" disabled>🔌 Connect Socket</button>
+        <button onclick="disconnectSocket()" id="disconnect-btn" disabled>❌ Disconnect</button>
+        <p>Status: <span id="socket-status">Not connected</span></p>
+        <div id="socket-messages" style="max-height: 200px; overflow-y: auto;"></div>
+    </div>
+</div>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+    const API_URL = 'http://localhost:3000/api/v1';
+    let accessToken = '';
+    let socket = null;
+    let userData = null;
+
+    // ========== REGISTER ==========
+    async function register() {
+        const tenantUrl = document.getElementById('tenant-url').value;
+        const data = {
+            first_name: document.getElementById('reg-firstname').value,
+            last_name: document.getElementById('reg-lastname').value,
+            username: document.getElementById('reg-username').value,
+            email: document.getElementById('reg-email').value,
+            password: document.getElementById('reg-password').value,
+            tenant_url: tenantUrl
+        };
+
+        console.log('Register data:', data);
+
+        try {
+            const response = await fetch(`${API_URL}/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+            document.getElementById('register-result').textContent =
+                JSON.stringify(result, null, 2);
+
+            if (result.status) {
+                document.getElementById('register-result').style.color = 'green';
+                // Auto-fill login
+                document.getElementById('login-email').value = data.email;
+            } else {
+                document.getElementById('register-result').style.color = 'red';
+            }
+        } catch (error) {
+            document.getElementById('register-result').textContent = 'Error: ' + error.message;
+            document.getElementById('register-result').style.color = 'red';
+        }
+    }
+
+    // ========== LOGIN ==========
+    async function login() {
+        const data = {
+            email: document.getElementById('login-email').value,
+            password: document.getElementById('login-password').value,
+            device_detail: {
+                device_type: 'web',
+                browser: navigator.userAgent,
+                platform: navigator.platform
+            },
+            location_detail: {
+                ip: '127.0.0.1'
+            }
+        };
+
+        console.log('Login data:', data);
+
+        try {
+            const response = await fetch(`${API_URL}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+            document.getElementById('login-result').textContent =
+                JSON.stringify(result, null, 2);
+
+            if (result.status && result.data) {
+                document.getElementById('login-result').style.color = 'green';
+
+                // Store token (NOTE: Your API returns 'token' not 'accessToken')
+                accessToken = result.data.token;
+                userData = result.data;
+
+                // Display token info
+                document.getElementById('token-info').style.display = 'block';
+                document.getElementById('access-token').textContent =
+                    accessToken ? accessToken.substring(0, 50) + '...' : 'No token';
+                document.getElementById('user-id').textContent = result.data.user_id || 'N/A';
+                document.getElementById('tenant-id').textContent = 'From token payload';
+                document.getElementById('copy-btn').style.display = 'block';
+                document.getElementById('connect-btn').disabled = false;
+
+                console.log('✅ Login successful, token:', accessToken);
+            } else {
+                document.getElementById('login-result').style.color = 'red';
+            }
+        } catch (error) {
+            document.getElementById('login-result').textContent = 'Error: ' + error.message;
+            document.getElementById('login-result').style.color = 'red';
+        }
+    }
+
+    // ========== COPY TOKEN ==========
+    function copyToken() {
+        if (accessToken) {
+            navigator.clipboard.writeText(accessToken);
+            alert('✅ Token copied to clipboard!');
+        }
+    }
+
+    // ========== SOCKET.IO ==========
+    function connectSocket() {
+        if (!accessToken) {
+            alert('Please login first!');
+            return;
+        }
+
+        document.getElementById('socket-status').textContent = 'Connecting...';
+        document.getElementById('socket-status').style.color = 'orange';
+
+        // Connect with token
+        socket = io('http://localhost:3000', {
+            auth: { token: accessToken },
+            transports: ['websocket'],
+            path: '/socket.io',
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 3000
+        });
+
+        socket.on('connect', () => {
+            document.getElementById('socket-status').textContent = '✅ Connected';
+            document.getElementById('socket-status').style.color = 'green';
+            document.getElementById('disconnect-btn').disabled = false;
+            addSocketMessage('✅ Connected to server (ID: ' + socket.id + ')');
+            console.log('Socket connected:', socket.id);
+        });
+
+        socket.on('connect_error', (error) => {
+            document.getElementById('socket-status').textContent = '❌ Connection Error';
+            document.getElementById('socket-status').style.color = 'red';
+            addSocketMessage('❌ Connection error: ' + error.message);
+            console.error('Socket connection error:', error);
+        });
+
+        socket.on('disconnect', (reason) => {
+            document.getElementById('socket-status').textContent = '🔌 Disconnected';
+            document.getElementById('socket-status').style.color = 'gray';
+            document.getElementById('disconnect-btn').disabled = true;
+            addSocketMessage('🔌 Disconnected: ' + reason);
+        });
+
+        // Auth events
+        socket.on('auth_success', (data) => {
+            addSocketMessage('✅ Auth successful: ' + JSON.stringify(data));
+        });
+
+        socket.on('auth_error', (error) => {
+            addSocketMessage('❌ Auth error: ' + error.message);
+        });
+
+        // Chat events
+        socket.on('message:new', (data) => {
+            addSocketMessage('📨 New message: ' + JSON.stringify(data));
+        });
+
+        socket.on('user:online', (data) => {
+            addSocketMessage('🟢 User online: ' + data.name);
+        });
+
+        socket.on('error', (error) => {
+            addSocketMessage('⚠️ Error: ' + JSON.stringify(error));
+        });
+    }
+
+    function disconnectSocket() {
+        if (socket) {
+            socket.disconnect();
+            socket = null;
+        }
+    }
+
+    function addSocketMessage(msg) {
+        const div = document.getElementById('socket-messages');
+        const msgDiv = document.createElement('div');
+        msgDiv.textContent = new Date().toLocaleTimeString() + ' - ' + msg;
+        msgDiv.style.padding = '5px';
+        msgDiv.style.borderBottom = '1px solid #eee';
+        div.appendChild(msgDiv);
+        div.scrollTop = div.scrollHeight;
+    }
+
+    // Check if tenant exists (helper)
+    async function checkTenants() {
+        try {
+            const response = await fetch('http://localhost:3000/api/v1/tenant');
+            const data = await response.json();
+            console.log('Available tenants:', data);
+            if (data.data && data.data.length > 0) {
+                document.getElementById('tenant-url').value = data.data[0].url;
+            }
+        } catch (e) {
+            console.log('No tenants endpoint or no tenants found');
+        }
+    }
+
+    // Run on load
+    window.onload = function() {
+        checkTenants();
+    };
+</script>
+</body>
+</html>

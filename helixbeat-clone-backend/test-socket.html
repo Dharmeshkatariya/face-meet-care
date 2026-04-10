@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Socket.io Test</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+<h1>🔌 Socket.io Test</h1>
+<input type="text" id="token" placeholder="Paste JWT Token here" style="width:400px;">
+<button onclick="connect()">Connect</button>
+<button onclick="disconnect()">Disconnect</button>
+<p>Status: <span id="status">Not connected</span></p>
+<div id="messages"></div>
+
+<script>
+    let socket;
+
+    function connect() {
+        const token = document.getElementById('token').value;
+        if (!token) return alert('Paste token first!');
+
+        socket = io('http://localhost:3000', {
+            auth: { token: token },
+            transports: ['websocket']
+        });
+
+        socket.on('connect', () => {
+            document.getElementById('status').innerHTML = '✅ Connected';
+            document.getElementById('status').style.color = 'green';
+            addMsg('Connected: ' + socket.id);
+        });
+
+        socket.on('connect_error', (e) => {
+            document.getElementById('status').innerHTML = '❌ Error';
+            addMsg('Error: ' + e.message);
+        });
+
+        socket.on('disconnect', () => {
+            document.getElementById('status').innerHTML = '🔌 Disconnected';
+        });
+
+        socket.on('auth_success', (d) => addMsg('Auth OK: ' + JSON.stringify(d)));
+        socket.on('message:new', (d) => addMsg('New message: ' + JSON.stringify(d)));
+    }
+
+    function disconnect() {
+        socket?.disconnect();
+    }
+
+    function addMsg(msg) {
+        const div = document.getElementById('messages');
+        div.innerHTML += '<p>' + msg + '</p>';
+    }
+</script>
+</body>
+</html>

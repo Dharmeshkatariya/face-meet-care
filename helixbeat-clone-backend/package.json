@@ -8,7 +8,13 @@
     "dev": "nodemon server.js",
     "seed": "node seed.js"
   },
-  "keywords": ["api", "backend", "nodejs", "express", "mongodb"],
+  "keywords": [
+    "api",
+    "backend",
+    "nodejs",
+    "express",
+    "mongodb"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
@@ -19,10 +25,13 @@
     "express": "^4.18.2",
     "express-validator": "^7.0.1",
     "helmet": "^7.0.0",
-    "jsonwebtoken": "^9.0.0",
+    "jsonwebtoken": "^9.0.3",
     "mongoose": "^7.0.0",
     "morgan": "^1.10.0",
-    "uuid": "^9.0.0"
+    "multer": "^2.1.1",
+    "sharp": "^0.34.5",
+    "socket.io": "^4.8.3",
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "nodemon": "^2.0.22"

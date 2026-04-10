@@ -212,6 +212,7 @@ exports.refreshToken = async (req, res) => {
             });
         }
 
+
         // Verify refresh token
         const decoded = jwt.verify(refresh_token, process.env.JWT_REFRESH_SECRET);
         const user = await User.findById(decoded.sub);

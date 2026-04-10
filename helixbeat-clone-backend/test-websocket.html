@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+</head>
+<body>
+<h1>WebSocket Test</h1>
+<div>
+    <input type="text" id="token" placeholder="JWT Token" style="width: 300px;">
+    <button onclick="connect()">Connect</button>
+    <button onclick="joinRoom()">Join Room</button>
+    <button onclick="sendMessage()">Send Message</button>
+</div>
+<div>
+    <input type="text" id="roomId" placeholder="Room ID">
+    <input type="text" id="message" placeholder="Message">
+</div>
+<div id="status"></div>
+<div id="messages"></div>
+
+<script>
+    let socket;
+
+    function connect() {
+        const token = document.getElementById('token').value;
+
+        socket = io('http://localhost:3000', {
+            auth: {
+                token: token
+            },
+            transports: ['websocket']
+        });
+
+        socket.on('connect', () => {
+            document.getElementById('status').innerHTML = '✅ Connected';
+            console.log('Connected with ID:', socket.id);
+        });
+
+        socket.on('message:new', (data) => {
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML += `<p><strong>${data.message.sender.name}:</strong> ${data.message.content}</p>`;
+        });
+
+        socket.on('user:online', (data) => {
+            console.log('User online:', data);
+        });
+
+        socket.on('error', (error) => {
+            document.getElementById('status').innerHTML = `❌ Error: ${error.message}`;
+        });
+
+        socket.on('disconnect', () => {
+            document.getElementById('status').innerHTML = '❌ Disconnected';
+        });
+    }
+
+    function joinRoom() {
+        const roomId = document.getElementById('roomId').value;
+        socket.emit('room:join', { roomId: roomId });
+    }
+
+    function sendMessage() {
+        const roomId = document.getElementById('roomId').value;
+        const message = document.getElementById('message').value;
+        socket.emit('message:send', {
+            roomId: roomId,
+            content: message,
+            type: 'text'
+        });
+    }
+</script>
+</body>
+</html>
