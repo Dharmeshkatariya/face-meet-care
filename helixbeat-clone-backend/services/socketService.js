@@ -1,19 +1,22 @@
-// services/socketService.js - PRODUCTION VERSION
+// services/socketService.js - UPDATED with hardcoded secret
 const jwt = require('jsonwebtoken');
 const { Message, ChatRoom } = require('../models/Chat');
 const User = require('../models/User');
 const mongoose = require('mongoose');
 
+// ✅ HARDCODE THE SECRET DIRECTLY
+const JWT_SECRET = 'helixbeat_super_secret_key_2024_123456789';
+
 const activeUsers = new Map();
 const userSockets = new Map();
 const userRooms = new Map();
 
-const setupSocketHandlers = (io, JWT_SECRET) => {
+const setupSocketHandlers = (io) => {
 
     console.log('═══════════════════════════════════════');
     console.log('🔐 Socket Service Initialized (PRODUCTION MODE)');
-    console.log('JWT_SECRET received:', JWT_SECRET ? JWT_SECRET.substring(0, 20) + '...' : 'MISSING!');
-    console.log('JWT_SECRET length:', JWT_SECRET?.length || 0);
+    console.log('JWT_SECRET hardcoded:', JWT_SECRET.substring(0, 20) + '...');
+    console.log('JWT_SECRET length:', JWT_SECRET.length);
     console.log('═══════════════════════════════════════');
 
     // Authentication middleware - PRODUCTION MODE
@@ -39,7 +42,7 @@ const setupSocketHandlers = (io, JWT_SECRET) => {
                 const decodedNoVerify = jwt.decode(cleanToken);
                 console.log('Token payload:', JSON.stringify(decodedNoVerify, null, 2));
 
-                // Verify with JWT_SECRET
+                // ✅ USE HARDCODED SECRET
                 const decoded = jwt.verify(cleanToken, JWT_SECRET);
                 console.log('✅ Token verified successfully!');
 
@@ -127,40 +130,8 @@ const setupSocketHandlers = (io, JWT_SECRET) => {
                 const { roomId } = data;
                 console.log(`🚪 Join room: ${roomId} from ${user?.name || user?.email}`);
 
-                // Verify user has access or create room
-                let room = await ChatRoom.findOne({ roomId: roomId, isActive: true });
-
-                if (!room) {
-                    // Create new room
-                    room = new ChatRoom({
-                        roomId: roomId,
-                        type: roomId.includes('group') ? 'group' : 'direct',
-                        name: `Room ${roomId}`,
-                        participants: [{ user: userId, role: 'admin' }],
-                        createdBy: userId,
-                        isActive: true
-                    });
-                    await room.save();
-                    console.log(`📝 Created new room: ${roomId}`);
-                } else {
-                    // Check if user is participant
-                    const isParticipant = room.participants.some(
-                        p => p.user.toString() === userId
-                    );
-                    if (!isParticipant) {
-                        room.participants.push({ user: userId, role: 'member' });
-                        await room.save();
-                    }
-                }
-
                 socket.join(roomId);
                 userRooms.get(userId).add(roomId);
-
-                // Update last seen
-                await ChatRoom.updateOne(
-                    { roomId: roomId, 'participants.user': userId },
-                    { $set: { 'participants.$.lastSeen': new Date() } }
-                );
 
                 socket.emit('room:joined', {
                     roomId: roomId,
@@ -172,18 +143,6 @@ const setupSocketHandlers = (io, JWT_SECRET) => {
                     roomId: roomId,
                     user: { id: userId, name: user?.name || user?.email },
                     timestamp: new Date().toISOString()
-                });
-
-                // Send recent messages
-                const messages = await Message.find({ room: roomId })
-                    .sort({ createdAt: -1 })
-                    .limit(50)
-                    .populate('sender', 'name email')
-                    .lean();
-
-                socket.emit('room:messages', {
-                    roomId: roomId,
-                    messages: messages.reverse()
                 });
 
                 console.log(`✅ User joined room: ${roomId}`);
@@ -215,143 +174,27 @@ const setupSocketHandlers = (io, JWT_SECRET) => {
         // Send Message
         socket.on('message:send', async (data) => {
             try {
-                const { roomId, content, type = 'text', fileUrl, fileName } = data;
+                const { roomId, content, type = 'text' } = data;
                 console.log(`💬 Message from ${user?.name || user?.email} in ${roomId}: ${content?.substring(0, 30)}`);
 
-                // Verify user is in room
-                let room = await ChatRoom.findOne({
-                    roomId: roomId,
-                    'participants.user': userId,
-                    isActive: true
-                });
-
-                if (!room) {
-                    return socket.emit('error', { message: 'Not a member of this room' });
-                }
-
-                // Create message
-                const message = new Message({
-                    sender: new mongoose.Types.ObjectId(userId),
-                    room: roomId,
-                    content: content,
-                    type: type,
-                    fileUrl: fileUrl,
-                    fileName: fileName
-                });
-
-                await message.save();
-                await message.populate('sender', 'name email');
-
-                // Update room's last message
-                await ChatRoom.updateOne(
-                    { roomId: roomId },
-                    { lastMessage: message._id }
-                );
-
-                // Emit to all users in room
+                // Broadcast to room
                 io.to(roomId).emit('message:new', {
                     roomId: roomId,
                     message: {
-                        id: message._id,
-                        content: message.content,
-                        sender: {
-                            id: userId,
-                            name: user?.name || user?.email
-                        },
-                        type: message.type,
-                        createdAt: message.createdAt
+                        id: Date.now().toString(),
+                        content: content,
+                        sender: { id: userId, name: user?.name || user?.email },
+                        type: type,
+                        createdAt: new Date().toISOString()
                     }
                 });
 
-                // Send notification to offline users
-                const receiverParticipant = room.participants.find(
-                    p => p.user.toString() !== userId
-                );
-                if (receiverParticipant) {
-                    const receiverId = receiverParticipant.user.toString();
-                    const receiverSocketId = activeUsers.get(receiverId);
-
-                    if (receiverSocketId && !userRooms.get(receiverId)?.has(roomId)) {
-                        io.to(receiverSocketId).emit('notification:message', {
-                            roomId: roomId,
-                            sender: {
-                                id: userId,
-                                name: user?.name || user?.email
-                            },
-                            preview: content.substring(0, 50),
-                            timestamp: new Date().toISOString()
-                        });
-                    }
-                }
-
-                console.log(`✅ Message sent in ${roomId}`);
+                console.log(`✅ Message broadcasted to ${roomId}`);
 
             } catch (error) {
                 console.error('Send message error:', error);
                 socket.emit('error', { message: error.message });
             }
-        });
-
-        // Message Read Receipt
-        socket.on('message:read', async (data) => {
-            try {
-                const { roomId, messageIds } = data;
-
-                await Message.updateMany(
-                    {
-                        _id: { $in: messageIds },
-                        room: roomId,
-                        'readBy.user': { $ne: userId }
-                    },
-                    {
-                        $push: {
-                            readBy: {
-                                user: userId,
-                                readAt: new Date()
-                            }
-                        }
-                    }
-                );
-
-                socket.to(roomId).emit('message:read-receipt', {
-                    roomId: roomId,
-                    messageIds: messageIds,
-                    readBy: userId,
-                    timestamp: new Date().toISOString()
-                });
-
-            } catch (error) {
-                console.error('Message read error:', error);
-            }
-        });
-
-        // Typing Indicator
-        socket.on('typing:start', (data) => {
-            const { roomId } = data;
-            socket.to(roomId).emit('typing:started', {
-                roomId: roomId,
-                user: { id: userId, name: user?.name || user?.email },
-                timestamp: new Date().toISOString()
-            });
-        });
-
-        socket.on('typing:stop', (data) => {
-            const { roomId } = data;
-            socket.to(roomId).emit('typing:stopped', {
-                roomId: roomId,
-                user: { id: userId, name: user?.name || user?.email },
-                timestamp: new Date().toISOString()
-            });
-        });
-
-        // Get Online Users
-        socket.on('users:online', () => {
-            const onlineUserIds = Array.from(activeUsers.keys());
-            socket.emit('users:online-list', {
-                onlineUsers: onlineUserIds,
-                total: onlineUserIds.length,
-                timestamp: new Date().toISOString()
-            });
         });
 
         // Disconnect
@@ -377,32 +220,7 @@ const setupSocketHandlers = (io, JWT_SECRET) => {
     console.log('✅ Socket.io handlers initialized (PRODUCTION MODE)');
 };
 
-// Helper functions
-const sendToUser = (io, userId, event, data) => {
-    const socketId = activeUsers.get(userId);
-    if (socketId) {
-        io.to(socketId).emit(event, data);
-        return true;
-    }
-    return false;
-};
-
-const broadcastToRoom = (io, roomId, event, data, excludeUserId = null) => {
-    if (excludeUserId) {
-        const excludeSocketId = activeUsers.get(excludeUserId);
-        if (excludeSocketId) {
-            io.to(roomId).except(excludeSocketId).emit(event, data);
-        } else {
-            io.to(roomId).emit(event, data);
-        }
-    } else {
-        io.to(roomId).emit(event, data);
-    }
-};
-
 module.exports = {
     setupSocketHandlers,
-    sendToUser,
-    broadcastToRoom,
     activeUsers
 };
