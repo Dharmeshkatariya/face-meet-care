@@ -1,4 +1,4 @@
-// server.js - Updated with WebSocket support
+// server.js - Complete Updated with Hardcoded JWT_SECRET
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -11,10 +11,24 @@ const http = require('http');
 const socketIo = require('socket.io');
 require('dotenv').config();
 
+// ✅ HARDCODE JWT SECRET TO ENSURE IT MATCHES
+const JWT_SECRET = 'helixbeat_super_secret_key_2024_123456789';
+const JWT_REFRESH_SECRET = 'helixbeat_refresh_secret_key_2024_987654321';
+
+// Override environment variables
+process.env.JWT_SECRET = JWT_SECRET;
+process.env.JWT_REFRESH_SECRET = JWT_REFRESH_SECRET;
+
+console.log('═══════════════════════════════════════');
+console.log('🔐 JWT Configuration:');
+console.log('JWT_SECRET:', JWT_SECRET.substring(0, 20) + '...');
+console.log('JWT_SECRET length:', JWT_SECRET.length);
+console.log('═══════════════════════════════════════');
+
 const app = express();
 const server = http.createServer(app);
 
-// ✅ FIXED: Socket.io with proper CORS and path
+// Socket.io configuration
 const io = socketIo(server, {
     cors: {
         origin: '*',
@@ -23,14 +37,13 @@ const io = socketIo(server, {
         allowedHeaders: ['Authorization', 'Content-Type']
     },
     transports: ['websocket', 'polling'],
-    path: '/socket.io/',  // ✅ FIXED: Add trailing slash
+    path: '/socket.io/',
     allowEIO3: true,
     pingTimeout: 60000,
     pingInterval: 25000,
     connectTimeout: 45000
 });
 
-// Make io accessible to routes
 app.set('io', io);
 
 // Ensure upload directories exist
@@ -68,6 +81,43 @@ if (process.env.NODE_ENV === 'development') {
 // Serve static files from uploads directory
 app.use('/uploads', express.static('uploads'));
 
+// ========== DEBUG ENDPOINTS ==========
+app.get('/api/v1/debug/secret', (req, res) => {
+    res.json({
+        secret_first_10: JWT_SECRET.substring(0, 10) + '...',
+        secret_length: JWT_SECRET.length,
+        secret_exists: true,
+        env: process.env.NODE_ENV || 'development'
+    });
+});
+
+app.post('/api/v1/debug/verify-token', (req, res) => {
+    try {
+        const { token } = req.body;
+        const cleanToken = token.replace('Bearer ', '').trim();
+
+        const jwt = require('jsonwebtoken');
+
+        // Decode without verification
+        const decodedNoVerify = jwt.decode(cleanToken);
+
+        // Verify with secret
+        const decoded = jwt.verify(cleanToken, JWT_SECRET);
+
+        res.json({
+            status: true,
+            decoded: decoded,
+            secret_used: JWT_SECRET.substring(0, 10) + '...'
+        });
+    } catch (error) {
+        res.status(401).json({
+            status: false,
+            message: error.message,
+            secret_used: JWT_SECRET.substring(0, 10) + '...'
+        });
+    }
+});
+
 // ========== IMPORT ROUTES ==========
 const authRoutes = require('./routes/authRoutes');
 const tenantRoutes = require('./routes/tenantRoutes');
@@ -77,7 +127,7 @@ const stateRoutes = require('./routes/stateRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const userRoutes = require('./routes/userRoutes');
 
-// ✅ Check if chatRoutes exists, if not create it
+// Chat routes with fallback
 let chatRoutes;
 try {
     chatRoutes = require('./routes/chatRoutes');
@@ -101,20 +151,13 @@ app.use(`/api/${apiVersion}/upload`, uploadRoutes);
 app.use(`/api/${apiVersion}/chat`, chatRoutes);
 
 // ========== SOCKET.IO HANDLERS ==========
-// ✅ Check if socketService exists
-try {
-    const { setupSocketHandlers } = require('./services/socketService');
-    setupSocketHandlers(io);
-    console.log('✅ Socket.io handlers loaded');
-} catch (e) {
-    console.error('❌ Socket service error:', e.message);
-    // Fallback socket handler
-    io.on('connection', (socket) => {
-        console.log('🔌 Socket connected (fallback):', socket.id);
-        socket.on('disconnect', () => console.log('🔌 Socket disconnected:', socket.id));
-    });
-}
+// Pass the hardcoded secret to socket service
 
+
+
+// To this:
+const socketService = require('./services/socketService');
+socketService.setupSocketHandlers(io); // ✅ No
 // ========== HEALTH CHECK ==========
 app.get('/health', (req, res) => {
     res.json({
@@ -139,12 +182,7 @@ app.get('/', (req, res) => {
             login: `/api/${apiVersion}/auth/login`,
             register: `/api/${apiVersion}/auth/register`,
             upload: `/api/${apiVersion}/upload`,
-            users: `/api/${apiVersion}/users`,
-            providers: `/api/${apiVersion}/providers`,
-            lookups: `/api/${apiVersion}/lookups`,
-            states: `/api/${apiVersion}/states`,
-            chat: `/api/${apiVersion}/chat`,
-            websocket: `${process.env.NODE_ENV === 'production' ? 'wss' : 'ws'}://${process.env.RENDER_EXTERNAL_URL || 'localhost:3000'}/socket.io/`
+            websocket: 'wss://face-meet-care.onrender.com/socket.io/'
         }
     });
 });
@@ -162,10 +200,8 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
     console.error('Error:', {
         message: err.message,
-        stack: err.stack,
         url: req.url,
-        method: req.method,
-        ip: req.ip
+        method: req.method
     });
 
     const status = err.status || 500;
@@ -174,7 +210,6 @@ app.use((err, req, res, next) => {
     res.status(status).json({
         status: false,
         message: message,
-        ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
         timestamp: new Date().toISOString()
     });
 });
@@ -185,19 +220,21 @@ const connectDB = async () => {
         await mongoose.connect(process.env.MONGODB_URI, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
-            serverSelectionTimeoutMS: 5000,
+            serverSelectionTimeoutMS: 30000,
             socketTimeoutMS: 45000,
+            family: 4,
+            ssl: true,
+            retryWrites: true,
+            w: 'majority'
         });
         console.log('✅ MongoDB Connected successfully');
 
         const PORT = process.env.PORT || 3000;
-        server.listen(PORT, '0.0.0.0', () => {  // ✅ FIXED: Bind to 0.0.0.0 for Render
+        server.listen(PORT, '0.0.0.0', () => {
             console.log(`🚀 Server running on port ${PORT}`);
-            console.log(`📍 Local: http://localhost:${PORT}`);
             console.log(`📍 API: http://localhost:${PORT}/api/${apiVersion}`);
             console.log(`🔌 WebSocket: ws://localhost:${PORT}/socket.io/`);
             console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-            console.log(`📁 Uploads directory: ${path.join(__dirname, 'uploads')}`);
         });
 
         server.on('error', (error) => {
@@ -218,20 +255,10 @@ const connectDB = async () => {
 // ========== PROCESS HANDLERS ==========
 process.on('unhandledRejection', (err) => {
     console.error('❌ Unhandled Rejection:', err);
-    if (process.env.NODE_ENV === 'production') {
-        console.error('Continuing despite unhandled rejection');
-    } else {
-        process.exit(1);
-    }
 });
 
 process.on('uncaughtException', (err) => {
     console.error('❌ Uncaught Exception:', err);
-    if (process.env.NODE_ENV === 'production') {
-        console.error('Continuing despite uncaught exception');
-    } else {
-        process.exit(1);
-    }
 });
 
 process.on('SIGTERM', () => {
@@ -244,6 +271,8 @@ process.on('SIGTERM', () => {
         });
     });
 });
+
+
 
 // Start the server
 connectDB();
