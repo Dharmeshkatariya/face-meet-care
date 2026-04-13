@@ -152,7 +152,321 @@ app.use(`/api/${apiVersion}/chat`, chatRoutes);
 
 // ========== SOCKET.IO HANDLERS ==========
 // Pass the hardcoded secret to socket service
+// ========== PAGINATION TEST ENDPOINTS ==========
+// Add these after your existing routes (around line 150-160)
 
+// Mock data generators
+const generatePaginatedUsers = (page, limit, search = '') => {
+  const users = [];
+  const totalUsers = 150; // Total users in database
+  const startIndex = (page - 1) * limit;
+
+  for (let i = 0; i < limit && startIndex + i < totalUsers; i++) {
+    const id = startIndex + i + 1;
+    const user = {
+      id: id,
+      name: `User ${id}`,
+      email: `user${id}@example.com`,
+      username: `user${id}`,
+      phone: `+1-555-${String(id).padStart(4, '0')}`,
+      website: id % 3 === 0 ? `https://user${id}.com` : null,
+      role: id === 1 ? 'admin' : (id % 5 === 0 ? 'moderator' : 'user'),
+      isActive: id % 4 !== 0,
+      createdAt: new Date(Date.now() - (id * 86400000)).toISOString(),
+      address: {
+        street: `${id} Main St`,
+        city: ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix'][id % 5],
+        country: 'USA'
+      }
+    };
+
+    // Apply search filter
+    if (search) {
+      const searchLower = search.toLowerCase();
+      if (!user.name.toLowerCase().includes(searchLower) &&
+          !user.email.toLowerCase().includes(searchLower)) {
+        continue;
+      }
+    }
+
+    users.push(user);
+  }
+
+  return users;
+};
+
+const generatePaginatedPosts = (page, limit, userId = null) => {
+  const posts = [];
+  const totalPosts = 500;
+  const startIndex = (page - 1) * limit;
+
+  for (let i = 0; i < limit && startIndex + i < totalPosts; i++) {
+    const id = startIndex + i + 1;
+    const postUserId = userId || (id % 10) + 1;
+
+    posts.push({
+      id: id,
+      userId: postUserId,
+      title: `Post Title ${id}: ${['Amazing', 'Interesting', 'Cool', 'Great', 'Awesome'][id % 5]} Stuff`,
+      body: `This is the body of post ${id}. It contains some meaningful content about various topics.`,
+      tags: ['tech', 'life', 'code', 'design', 'mobile'].slice(0, (id % 3) + 2),
+      likes: Math.floor(Math.random() * 1000),
+      comments: Math.floor(Math.random() * 50),
+      createdAt: new Date(Date.now() - (id * 3600000)).toISOString(),
+      updatedAt: id % 3 === 0 ? new Date(Date.now() - (id * 1800000)).toISOString() : null
+    });
+  }
+
+  return posts;
+};
+
+// ========== PAGE-BASED PAGINATION ==========
+app.get('/api/v1/users', (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const search = req.query.search || '';
+    const sort = req.query.sort || 'id';
+    const order = req.query.order || 'asc';
+
+    const users = generatePaginatedUsers(page, limit, search);
+    const totalUsers = 150;
+    const totalPages = Math.ceil(totalUsers / limit);
+
+    // Add pagination metadata in headers
+    res.set({
+      'X-Total-Count': totalUsers.toString(),
+      'X-Total-Pages': totalPages.toString(),
+      'X-Current-Page': page.toString(),
+      'X-Page-Size': limit.toString(),
+      'X-Has-Next': (page < totalPages).toString(),
+      'X-Has-Prev': (page > 1).toString()
+    });
+
+    res.json({
+      status: true,
+      data: users,
+      pagination: {
+        page: page,
+        limit: limit,
+        total: totalUsers,
+        totalPages: totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
+// ========== CURSOR-BASED PAGINATION ==========
+app.get('/api/v1/posts', (req, res) => {
+  try {
+    const cursor = req.query.cursor ? parseInt(req.query.cursor) : null;
+    const limit = parseInt(req.query.limit) || 20;
+    const userId = req.query.userId ? parseInt(req.query.userId) : null;
+
+    const startId = cursor || 1;
+    const posts = [];
+    const totalPosts = 500;
+
+    for (let i = 0; i < limit && startId + i <= totalPosts; i++) {
+      const id = startId + i;
+      const postUserId = userId || (id % 10) + 1;
+
+      posts.push({
+        id: id,
+        userId: postUserId,
+        title: `Post ${id}`,
+        body: `Content for post ${id}`,
+        createdAt: new Date(Date.now() - (id * 3600000)).toISOString()
+      });
+    }
+
+    const nextCursor = startId + posts.length;
+    const hasMore = nextCursor <= totalPosts;
+
+    res.json({
+      status: true,
+      data: posts,
+      pagination: {
+        cursor: cursor,
+        nextCursor: hasMore ? nextCursor : null,
+        limit: limit,
+        hasMore: hasMore
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
+// ========== OFFSET-BASED PAGINATION ==========
+app.get('/api/v1/posts/feed', (req, res) => {
+  try {
+    const offset = parseInt(req.query.offset) || 0;
+    const limit = parseInt(req.query.limit) || 20;
+
+    const posts = [];
+    const totalPosts = 500;
+
+    for (let i = 0; i < limit && offset + i < totalPosts; i++) {
+      const id = offset + i + 1;
+      posts.push({
+        id: id,
+        userId: (id % 10) + 1,
+        title: `Feed Post ${id}`,
+        body: `Feed content ${id}`,
+        createdAt: new Date(Date.now() - (id * 1800000)).toISOString()
+      });
+    }
+
+    res.json({
+      status: true,
+      data: posts,
+      pagination: {
+        offset: offset,
+        limit: limit,
+        nextOffset: offset + posts.length,
+        hasMore: offset + posts.length < totalPosts,
+        total: totalPosts
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
+// ========== LINK HEADER PAGINATION (RFC 5988) ==========
+app.get('/api/v1/notifications', (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+
+    const notifications = [];
+    const totalNotifications = 200;
+    const startIndex = (page - 1) * limit;
+
+    for (let i = 0; i < limit && startIndex + i < totalNotifications; i++) {
+      const id = startIndex + i + 1;
+      notifications.push({
+        id: id,
+        type: ['info', 'success', 'warning', 'error'][id % 4],
+        title: `Notification ${id}`,
+        message: `This is notification message ${id}`,
+        read: id % 3 === 0,
+        createdAt: new Date(Date.now() - (id * 3600000)).toISOString()
+      });
+    }
+
+    const totalPages = Math.ceil(totalNotifications / limit);
+    const baseUrl = `${req.protocol}://${req.get('host')}${req.path}`;
+
+    // Build Link header (RFC 5988)
+    const links = [];
+    if (page < totalPages) {
+      links.push(`<${baseUrl}?page=${page + 1}&limit=${limit}>; rel="next"`);
+    }
+    if (page > 1) {
+      links.push(`<${baseUrl}?page=${page - 1}&limit=${limit}>; rel="prev"`);
+    }
+    links.push(`<${baseUrl}?page=1&limit=${limit}>; rel="first"`);
+    links.push(`<${baseUrl}?page=${totalPages}&limit=${limit}>; rel="last"`);
+
+    if (links.length > 0) {
+      res.set('Link', links.join(', '));
+    }
+
+    res.json({
+      status: true,
+      data: notifications,
+      meta: {
+        page: page,
+        limit: limit,
+        totalPages: totalPages,
+        total: totalNotifications
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
+// ========== SEARCH WITH PAGINATION ==========
+app.get('/api/v1/users/search', (req, res) => {
+  try {
+    const query = req.query.q || '';
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+
+    const users = generatePaginatedUsers(page, limit, query);
+
+    res.json({
+      status: true,
+      data: users,
+      query: query,
+      pagination: {
+        page: page,
+        limit: limit,
+        hasMore: users.length === limit
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
+// ========== LARGE DATASET (For stress testing) ==========
+app.get('/api/v1/logs', (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 100;
+    const level = req.query.level || 'all';
+
+    const logs = [];
+    const totalLogs = 10000;
+    const startIndex = (page - 1) * limit;
+
+    const levels = ['info', 'debug', 'warn', 'error'];
+
+    for (let i = 0; i < limit && startIndex + i < totalLogs; i++) {
+      const id = startIndex + i + 1;
+      const logLevel = levels[id % levels.length];
+
+      if (level !== 'all' && logLevel !== level) continue;
+
+      logs.push({
+        id: id,
+        level: logLevel,
+        message: `Log entry ${id}: This is a ${logLevel} message`,
+        timestamp: new Date(Date.now() - (id * 1000)).toISOString(),
+        source: ['api', 'auth', 'database', 'cache'][id % 4]
+      });
+    }
+
+    res.json({
+      status: true,
+      data: logs,
+      pagination: {
+        page: page,
+        limit: limit,
+        total: totalLogs,
+        totalPages: Math.ceil(totalLogs / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
+console.log('✅ Pagination endpoints registered:');
+console.log('   📄 GET /api/v1/users - Page-based pagination');
+console.log('   📄 GET /api/v1/posts - Cursor-based pagination');
+console.log('   📄 GET /api/v1/posts/feed - Offset-based pagination');
+console.log('   📄 GET /api/v1/notifications - Link header pagination');
+console.log('   📄 GET /api/v1/users/search - Search with pagination');
+console.log('   📄 GET /api/v1/logs - Large dataset (10,000 items)');
 
 
 // To this:
