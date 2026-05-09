@@ -434,6 +434,145 @@ app.use((err, req, res, next) => {
     res.status(status).json({ status: false, message, timestamp: new Date().toISOString() });
 });
 
+// ============================================
+// 🎯 SERVICES ENDPOINT (For Booking Dashboard)
+// ============================================
+
+app.get('/api/v1/services', (req, res) => {
+  try {
+    const services = [
+      {
+        id: 'cleaning_001',
+        service_id: 'cleaning_001',
+        name: 'Home Cleaning',
+        service_name: 'Home Cleaning',
+        provider_id: 'provider_001',
+        provider_name: 'Sarah Johnson',
+        price: 499,
+        base_price: 499,
+        duration: '2 hrs',
+        rating: 4.8,
+        category: 'home',
+        image_url: null
+      },
+      {
+        id: 'plumbing_001',
+        service_id: 'plumbing_001',
+        name: 'Plumbing Repair',
+        service_name: 'Plumbing Repair',
+        provider_id: 'provider_002',
+        provider_name: 'Mike Peters',
+        price: 349,
+        base_price: 349,
+        duration: '1 hr',
+        rating: 4.5,
+        category: 'home',
+        image_url: null
+      },
+      {
+        id: 'beauty_001',
+        service_id: 'beauty_001',
+        name: 'Salon at Home',
+        service_name: 'Salon at Home',
+        provider_id: 'provider_003',
+        provider_name: 'Priya Sharma',
+        price: 599,
+        base_price: 599,
+        duration: '1.5 hrs',
+        rating: 4.9,
+        category: 'beauty',
+        image_url: null
+      },
+      {
+        id: 'painting_001',
+        service_id: 'painting_001',
+        name: 'Wall Painting',
+        service_name: 'Wall Painting',
+        provider_id: 'provider_004',
+        provider_name: 'Raj Kumar',
+        price: 1999,
+        base_price: 1999,
+        duration: '4 hrs',
+        rating: 4.6,
+        category: 'home',
+        image_url: null
+      },
+      {
+        id: 'electrical_001',
+        service_id: 'electrical_001',
+        name: 'Electrician',
+        service_name: 'Electrician',
+        provider_id: 'provider_005',
+        provider_name: 'Amit Singh',
+        price: 399,
+        base_price: 399,
+        duration: '1 hr',
+        rating: 4.7,
+        category: 'home',
+        image_url: null
+      },
+      {
+        id: 'tutoring_001',
+        service_id: 'tutoring_001',
+        name: 'Home Tutoring',
+        service_name: 'Home Tutoring',
+        provider_id: 'provider_006',
+        provider_name: 'Dr. Mehta',
+        price: 899,
+        base_price: 899,
+        duration: '2 hrs',
+        rating: 4.9,
+        category: 'education',
+        image_url: null
+      },
+      {
+        id: 'pest_control_001',
+        service_id: 'pest_control_001',
+        name: 'Pest Control',
+        service_name: 'Pest Control',
+        provider_id: 'provider_007',
+        provider_name: 'PestFree Solutions',
+        price: 799,
+        base_price: 799,
+        duration: '1.5 hrs',
+        rating: 4.4,
+        category: 'home',
+        image_url: null
+      },
+      {
+        id: 'ac_repair_001',
+        service_id: 'ac_repair_001',
+        name: 'AC Repair',
+        service_name: 'AC Repair',
+        provider_id: 'provider_008',
+        provider_name: 'CoolTech Services',
+        price: 649,
+        base_price: 649,
+        duration: '1 hr',
+        rating: 4.3,
+        category: 'appliance',
+        image_url: null
+      }
+    ];
+
+    // Support search
+    const search = req.query.q?.toLowerCase() || '';
+    const filtered = search
+      ? services.filter(s => s.name.toLowerCase().includes(search))
+      : services;
+
+    res.json({
+      status: true,
+      data: filtered,
+      total: filtered.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ status: false, message: error.message });
+  }
+});
+
+console.log('✅ Services endpoint: GET /api/v1/services');
 // ========== DATABASE CONNECTION ==========
 const connectDB = async () => {
     try {
