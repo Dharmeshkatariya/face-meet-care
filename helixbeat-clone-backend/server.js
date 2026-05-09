@@ -351,39 +351,35 @@ app.use(`/api/${apiVersion}/lookups`, lookupRoutes);
 app.use(`/api/${apiVersion}/states`, stateRoutes);
 app.use(`/api/${apiVersion}/upload`, uploadRoutes);
 app.use(`/api/${apiVersion}/chat`, chatRoutes);
-
-// ========== BOOKING ROUTES ==========
+// ============================================
+// 🎯 BOOKING MODULE ROUTES
 // ============================================
 try {
     const bookingRoutes = require('./routes/bookingRoutes');
     app.use('/api/v1/bookings', bookingRoutes);
-    console.log('✅ Booking endpoints registered (18 routes)');
+    console.log('✅ Booking API ready: http://localhost:' + (process.env.PORT || 3000) + '/api/v1/bookings');
 } catch (e) {
-    console.log('⚠️ Booking routes not found, using fallback');
+    console.error('❌ Booking routes failed to load:', e.message);
+    // Fallback
     const router = require('express').Router();
-    router.get('/', (req, res) => res.json({ message: 'Booking API', endpoints: ['/availability', '/instant', '/my', '/coupons/validate'] }));
+    router.get('/', (req, res) => {
+        res.json({
+            status: true,
+            message: 'Booking API (Fallback)',
+            note: 'bookingRoutes.js not found on server',
+            endpoints: [
+                'GET /availability',
+                'GET /availability/realtime',
+                'GET /availability/calendar',
+                'POST /instant',
+                'POST /schedule',
+                'GET /my'
+            ]
+        });
+    });
     app.use('/api/v1/bookings', router);
 }
 
-console.log('✅ Booking endpoints registered (18 endpoints):');
-console.log('   📅 GET    /api/v1/bookings/availability');
-console.log('   📅 GET    /api/v1/bookings/availability/realtime');
-console.log('   📅 GET    /api/v1/bookings/availability/calendar');
-console.log('   ⚡ POST   /api/v1/bookings/instant');
-console.log('   📋 POST   /api/v1/bookings/schedule');
-console.log('   🔄 POST   /api/v1/bookings/recurring');
-console.log('   👥 POST   /api/v1/bookings/group');
-console.log('   🎫 POST   /api/v1/bookings/waitlist/join');
-console.log('   📊 GET    /api/v1/bookings/waitlist/:bookingId/status');
-console.log('   🚪 POST   /api/v1/bookings/waitlist/:bookingId/leave');
-console.log('   🔧 PUT    /api/v1/bookings/:bookingId/reschedule');
-console.log('   ✅ GET    /api/v1/bookings/:bookingId/reschedule-check');
-console.log('   ❌ POST   /api/v1/bookings/:bookingId/cancel');
-console.log('   👁️  GET    /api/v1/bookings/:bookingId/cancellation-preview');
-console.log('   📄 GET    /api/v1/bookings/my');
-console.log('   🔍 GET    /api/v1/bookings/:bookingId');
-console.log('   🎟️  POST   /api/v1/bookings/coupons/validate');
-console.log('   💰 POST   /api/v1/bookings/calculate-price');
 
 // ========== SOCKET.IO HANDLERS ==========
 const socketService = require('./services/socketService');
