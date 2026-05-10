@@ -351,33 +351,55 @@ app.use(`/api/${apiVersion}/lookups`, lookupRoutes);
 app.use(`/api/${apiVersion}/states`, stateRoutes);
 app.use(`/api/${apiVersion}/upload`, uploadRoutes);
 app.use(`/api/${apiVersion}/chat`, chatRoutes);
+
+
 // ============================================
-// 🎯 BOOKING MODULE ROUTES
+// 🎯 BOOKING MODULE - ALL ROUTES
 // ============================================
 try {
-    const bookingRoutes = require('./routes/bookingRoutes');
-    app.use('/api/v1/bookings', bookingRoutes);
-    console.log('✅ Booking API ready: http://localhost:' + (process.env.PORT || 3000) + '/api/v1/bookings');
+    // Services catalog
+    app.use('/api/v1/services', require('./routes/booking/serviceRoutes'));
+    console.log('✅ Services routes registered');
+
+    // Availability & Slots
+    app.use('/api/v1/bookings/availability', require('./routes/booking/availabilityRoutes'));
+    console.log('✅ Availability routes registered');
+
+    // Booking CRUD
+    app.use('/api/v1/bookings', require('./routes/booking/bookingRoutes'));
+    console.log('✅ Booking routes registered');
+
+    // Waitlist
+    app.use('/api/v1/waitlist', require('./routes/booking/waitlistRoutes'));
+    console.log('✅ Waitlist routes registered');
+
+    // Coupons & Pricing
+    app.use('/api/v1/coupons', require('./routes/booking/couponRoutes'));
+    console.log('✅ Coupon routes registered');
+
+    console.log('═══════════════════════════════════════');
+    console.log('✅✅✅ FULL BOOKING MODULE ACTIVE ✅✅✅');
+    console.log('═══════════════════════════════════════');
 } catch (e) {
-    console.error('❌ Booking routes failed to load:', e.message);
-    // Fallback
-    const router = require('express').Router();
-    router.get('/', (req, res) => {
-        res.json({
-            status: true,
-            message: 'Booking API (Fallback)',
-            note: 'bookingRoutes.js not found on server',
-            endpoints: [
-                'GET /availability',
-                'GET /availability/realtime',
-                'GET /availability/calendar',
-                'POST /instant',
-                'POST /schedule',
-                'GET /my'
-            ]
-        });
+    console.error('❌ Booking module failed:', e.message);
+    // Fallback for services
+    app.get('/api/v1/services', (req, res) => {
+        const services = [
+            { id: 'cleaning_001', name: 'Home Cleaning', provider_id: 'provider_001', provider_name: 'Sarah Johnson', price: 499, base_price: 499, duration: '2 hrs', rating: 4.8, category: 'home' },
+            { id: 'plumbing_001', name: 'Plumbing Repair', provider_id: 'provider_002', provider_name: 'Mike Peters', price: 349, base_price: 349, duration: '1 hr', rating: 4.5, category: 'home' },
+            { id: 'beauty_001', name: 'Salon at Home', provider_id: 'provider_003', provider_name: 'Priya Sharma', price: 599, base_price: 599, duration: '1.5 hrs', rating: 4.9, category: 'beauty' },
+            { id: 'painting_001', name: 'Wall Painting', provider_id: 'provider_004', provider_name: 'Raj Kumar', price: 1999, base_price: 1999, duration: '4 hrs', rating: 4.6, category: 'home' },
+            { id: 'electrical_001', name: 'Electrician', provider_id: 'provider_005', provider_name: 'Amit Singh', price: 399, base_price: 399, duration: '1 hr', rating: 4.7, category: 'home' },
+            { id: 'tutoring_001', name: 'Home Tutoring', provider_id: 'provider_006', provider_name: 'Dr. Mehta', price: 899, base_price: 899, duration: '2 hrs', rating: 4.9, category: 'education' }
+        ];
+        const search = req.query.q?.toLowerCase() || '';
+        const filtered = search ? services.filter(s => s.name.toLowerCase().includes(search)) : services;
+        res.json({ status: true, data: filtered, total: filtered.length });
     });
-    app.use('/api/v1/bookings', router);
+    // Fallback for bookings
+    const bookingRouter = require('express').Router();
+    bookingRouter.get('/', (req, res) => res.json({ status: true, message: 'Booking API (Fallback)', endpoints: ['GET /availability', 'POST /instant', 'GET /my'] }));
+    app.use('/api/v1/bookings', bookingRouter);
 }
 
 
@@ -407,7 +429,11 @@ app.get('/', (req, res) => {
         public_endpoints: {
             users: '/api/v1/users',
             posts: '/api/v1/posts',
-           bookings: '/api/v1/bookings',
+          services: '/api/v1/services',
+                     bookings: '/api/v1/bookings',
+                     availability: '/api/v1/bookings/availability',
+                     waitlist: '/api/v1/waitlist',
+                     coupons: '/api/v1/coupons',
             posts_feed: '/api/v1/posts/feed',
             notifications: '/api/v1/notifications',
             search: '/api/v1/users/search',
