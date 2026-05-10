@@ -1,14 +1,14 @@
-// models/Booking.js
+// models/booking/Booking.js
 
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 
 const bookingSchema = new mongoose.Schema({
-    // ========== BASIC INFO ==========
+    // ========== BASIC IDENTIFIERS ==========
     booking_id: {
         type: String,
         unique: true,
-        default: () => `booking_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`
+        default: () => 'BK' + Date.now().toString(36).toUpperCase() + crypto.randomBytes(3).toString('hex').toUpperCase()
     },
     service_id: {
         type: String,
@@ -20,10 +20,6 @@ const bookingSchema = new mongoose.Schema({
         required: [true, 'Service name is required'],
         trim: true
     },
-    service_image: {
-        type: String,
-        default: null
-    },
     provider_id: {
         type: String,
         required: [true, 'Provider ID is required'],
@@ -34,26 +30,14 @@ const bookingSchema = new mongoose.Schema({
         required: [true, 'Provider name is required'],
         trim: true
     },
-    provider_image: {
-        type: String,
-        default: null
-    },
-    provider_rating: {
-        type: Number,
-        default: 0,
-        min: 0,
-        max: 5
-    },
-
-    // ========== CUSTOMER INFO ==========
     customer_id: {
         type: String,
-        required: true,
+        required: [true, 'Customer ID is required'],
         trim: true
     },
     customer_name: {
         type: String,
-        required: true,
+        required: [true, 'Customer name is required'],
         trim: true
     },
     customer_email: {
@@ -75,38 +59,42 @@ const bookingSchema = new mongoose.Schema({
     status: {
         type: String,
         enum: ['pending', 'confirmed', 'in_progress', 'completed', 'cancelled', 'rescheduled', 'queued', 'no_show'],
-        default: 'pending'
+        default: 'confirmed'
     },
     booking_date: {
         type: Date,
-        required: true
+        required: [true, 'Booking date is required']
     },
     start_time: {
         type: Date,
-        required: true
+        required: [true, 'Start time is required']
     },
     end_time: {
         type: Date,
-        required: true
+        required: [true, 'End time is required']
     },
     slot_id: {
         type: String,
-        default: null
+        trim: true
+    },
+    duration_minutes: {
+        type: Number,
+        default: 60
+    },
+    buffer_minutes: {
+        type: Number,
+        default: 15
     },
 
     // ========== LOCATION ==========
-    address_id: {
-        type: String,
-        default: null
-    },
     address: {
         type: String,
-        default: null
+        default: ''
     },
     address_label: {
         type: String,
-        enum: ['home', 'office', 'other', null],
-        default: null
+        enum: ['home', 'office', 'other', ''],
+        default: ''
     },
     latitude: {
         type: Number,
@@ -116,17 +104,27 @@ const bookingSchema = new mongoose.Schema({
         type: Number,
         default: null
     },
+    location_notes: {
+        type: String,
+        default: ''
+    },
 
     // ========== PRICING ==========
     base_price: {
         type: Number,
-        required: true,
-        min: 0
+        required: [true, 'Base price is required'],
+        min: [0, 'Price cannot be negative']
     },
     discount: {
         type: Number,
         default: 0,
         min: 0
+    },
+    discount_percentage: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 100
     },
     tax_amount: {
         type: Number,
@@ -138,12 +136,12 @@ const bookingSchema = new mongoose.Schema({
     },
     total_amount: {
         type: Number,
-        required: true,
-        min: 0
+        required: [true, 'Total amount is required'],
+        min: [0, 'Total cannot be negative']
     },
     coupon_code: {
         type: String,
-        default: null
+        trim: true
     },
     coupon_discount: {
         type: Number,
@@ -165,7 +163,7 @@ const bookingSchema = new mongoose.Schema({
     },
     cancellation_policy: {
         type: String,
-        enum: ['flexible', 'moderate', 'strict', 'custom'],
+        enum: ['flexible', 'moderate', 'strict'],
         default: 'moderate'
     },
     reschedule_penalty_type: {
@@ -183,7 +181,7 @@ const bookingSchema = new mongoose.Schema({
         type: Number,
         default: null
     },
-    is_auto_confirm: {
+    is_auto_confirm_enabled: {
         type: Boolean,
         default: false
     },
@@ -202,10 +200,6 @@ const bookingSchema = new mongoose.Schema({
         type: String,
         default: null
     },
-    grouped_service_ids: {
-        type: [String],
-        default: null
-    },
     grouped_services: [{
         service_id: String,
         service_name: String,
@@ -213,81 +207,103 @@ const bookingSchema = new mongoose.Schema({
         price: Number,
         start_time: Date,
         end_time: Date,
-        status: String
+        status: {
+            type: String,
+            enum: ['pending', 'confirmed', 'completed', 'cancelled'],
+            default: 'pending'
+        }
     }],
 
-    // ========== PREFERENCES ==========
+    // ========== ADDONS ==========
+    addons: [{
+        addon_id: String,
+        name: String,
+        description: String,
+        price: Number,
+        quantity: {
+            type: Number,
+            default: 1,
+            min: 1
+        },
+        is_required: {
+            type: Boolean,
+            default: false
+        }
+    }],
+
+    // ========== PREFERENCES & NOTES ==========
     preferences: {
-        type: Map,
-        of: mongoose.Schema.Types.Mixed,
+        type: mongoose.Schema.Types.Mixed,
         default: null
     },
     service_details: {
-        type: Map,
-        of: mongoose.Schema.Types.Mixed,
+        type: mongoose.Schema.Types.Mixed,
         default: null
     },
     notes: {
         type: String,
-        default: null,
-        maxlength: 500
+        maxlength: [500, 'Notes cannot exceed 500 characters']
+    },
+    special_instructions: {
+        type: String,
+        maxlength: [1000, 'Instructions too long']
     },
 
     // ========== PAYMENT ==========
     payment_method: {
         type: {
-            id: String,
-            type: { type: String, enum: ['card', 'wallet', 'cash', 'upi', 'net_banking', 'bnpl'] },
-            last4: String,
-            brand: String,
-            bank_name: String,
-            is_default: Boolean,
-            upi_id: String
+            type: String,
+            enum: ['card', 'wallet', 'cash', 'upi', 'net_banking', 'bnpl']
         },
-        default: null
+        last4: String,
+        brand: String,
+        bank_name: String,
+        is_default: Boolean,
+        upi_id: String
     },
     payment_status: {
         type: String,
         enum: ['pending', 'paid', 'refunded', 'partial_refund', 'failed'],
-        default: 'pending'
+        default: 'paid'
     },
     transaction_id: {
         type: String,
-        default: null
+        trim: true
+    },
+    payment_date: {
+        type: Date
     },
 
     // ========== CANCELLATION ==========
     cancellation_reason: {
-        type: String,
-        default: null
+        type: String
     },
     cancelled_at: {
-        type: Date,
-        default: null
+        type: Date
     },
     cancelled_by: {
         type: String,
-        enum: ['customer', 'provider', 'admin', null],
-        default: null
+        enum: ['customer', 'provider', 'admin', 'system', null]
     },
     refund_amount: {
         type: Number,
-        default: null
+        default: null,
+        min: 0
     },
     refund_status: {
         type: String,
-        enum: ['not_initiated', 'processing', 'completed', 'failed', null],
-        default: null
+        enum: ['not_initiated', 'processing', 'completed', 'failed', null]
+    },
+    refund_transaction_id: {
+        type: String
     },
 
     // ========== RESCHEDULE ==========
     rescheduled_from: {
-        type: Date,
-        default: null
+        type: Date
     },
     rescheduled_to: {
-        type: Date,
-        default: null
+        type: Date
     },
     reschedule_count: {
         type: Number,
@@ -296,7 +312,9 @@ const bookingSchema = new mongoose.Schema({
     },
     max_reschedules: {
         type: Number,
-        default: 3
+        default: 3,
+        min: 0,
+        max: 10
     },
     reschedule_fee: {
         type: Number,
@@ -312,31 +330,50 @@ const bookingSchema = new mongoose.Schema({
         reason: String
     }],
 
-    // ========== REVIEWS ==========
+    // ========== REVIEW ==========
     rating: {
         type: Number,
-        default: null,
-        min: 0,
-        max: 5
+        min: [0, 'Rating minimum is 0'],
+        max: [5, 'Rating maximum is 5']
     },
     review: {
         type: String,
-        default: null,
-        maxlength: 1000
+        maxlength: [1000, 'Review too long']
+    },
+    review_title: {
+        type: String,
+        maxlength: 200
     },
     reviewed_at: {
-        type: Date,
-        default: null
+        type: Date
+    },
+    review_helpful_count: {
+        type: Number,
+        default: 0
     },
 
-    // ========== ADDONS ==========
-    addons: [{
-        id: String,
-        name: String,
-        description: String,
-        price: Number,
-        quantity: Number,
-        is_required: Boolean
+    // ========== PROVIDER FEEDBACK ==========
+    provider_rating: {
+        type: Number,
+        min: 0,
+        max: 5
+    },
+    provider_feedback: {
+        type: String
+    },
+
+    // ========== COMMUNICATION ==========
+    chat_room_id: {
+        type: String
+    },
+    notification_preferences: {
+        sms: { type: Boolean, default: true },
+        email: { type: Boolean, default: true },
+        push: { type: Boolean, default: true }
+    },
+    reminders_sent: [{
+        type: { type: String, enum: ['sms', 'email', 'push'] },
+        sent_at: Date
     }],
 
     // ========== META ==========
@@ -345,27 +382,31 @@ const bookingSchema = new mongoose.Schema({
         default: false
     },
     qr_code: {
-        type: String,
-        default: null
+        type: String
     },
     referral_code: {
-        type: String,
-        default: null
+        type: String
     },
-    custom_fields: {
-        type: Map,
-        of: mongoose.Schema.Types.Mixed,
-        default: null
+    referral_discount: {
+        type: Number,
+        default: 0
     },
     source: {
         type: String,
-        enum: ['web', 'mobile', 'api', 'admin'],
+        enum: ['web', 'mobile', 'api', 'admin', 'partner'],
         default: 'web'
     },
-    tenant_id: {
-        type: String,
-        required: true,
-        ref: 'Tenant'
+    user_agent: {
+        type: String
+    },
+    ip_address: {
+        type: String
+    },
+    tags: [{
+        type: String
+    }],
+    custom_fields: {
+        type: mongoose.Schema.Types.Mixed
     },
 
     // ========== TIMESTAMPS ==========
@@ -385,11 +426,14 @@ const bookingSchema = new mongoose.Schema({
 // ========== INDEXES ==========
 bookingSchema.index({ booking_id: 1 }, { unique: true });
 bookingSchema.index({ customer_id: 1, status: 1 });
-bookingSchema.index({ provider_id: 1, booking_date: 1 });
+bookingSchema.index({ provider_id: 1, booking_date: 1, status: 1 });
 bookingSchema.index({ service_id: 1, booking_date: 1 });
-bookingSchema.index({ status: 1, booking_date: 1 });
+bookingSchema.index({ slot_id: 1, status: 1 });
+bookingSchema.index({ booking_date: 1, start_time: 1 });
 bookingSchema.index({ group_booking_id: 1 });
 bookingSchema.index({ recurring_group_id: 1 });
+bookingSchema.index({ status: 1, booking_date: 1 });
+bookingSchema.index({ payment_status: 1 });
 bookingSchema.index({ created_at: -1 });
 
 // ========== PRE-SAVE MIDDLEWARE ==========
@@ -401,13 +445,13 @@ bookingSchema.pre('save', function(next) {
 // ========== INSTANCE METHODS ==========
 
 /**
- * Calculate service duration
+ * Get service duration in minutes
  */
 bookingSchema.methods.getDuration = function() {
     if (this.start_time && this.end_time) {
-        return (this.end_time - this.start_time) / (1000 * 60); // minutes
+        return Math.round((this.end_time - this.start_time) / (1000 * 60));
     }
-    return 0;
+    return this.duration_minutes || 60;
 };
 
 /**
@@ -418,10 +462,9 @@ bookingSchema.methods.canCancel = function() {
     if (!allowedStatuses.includes(this.status)) return false;
 
     if (this.start_time) {
-        const hoursUntilService = (new Date(this.start_time) - new Date()) / (1000 * 60 * 60);
-        if (hoursUntilService < 2) return false; // Minimum 2 hours notice
+        const hoursUntil = (new Date(this.start_time) - new Date()) / (1000 * 60 * 60);
+        return hoursUntil >= 2;
     }
-
     return true;
 };
 
@@ -429,65 +472,72 @@ bookingSchema.methods.canCancel = function() {
  * Check if booking can be rescheduled
  */
 bookingSchema.methods.canReschedule = function() {
-    if (this.status === 'cancelled' || this.status === 'completed' || this.status === 'no_show') {
-        return false;
+    if (['cancelled', 'completed', 'no_show'].includes(this.status)) return false;
+    if (this.reschedule_count >= this.max_reschedules) return false;
+
+    if (this.start_time) {
+        const hoursUntil = (new Date(this.start_time) - new Date()) / (1000 * 60 * 60);
+        return hoursUntil >= 2;
     }
-    return this.reschedule_count < this.max_reschedules;
+    return true;
 };
 
 /**
- * Calculate refund amount
+ * Calculate estimated refund
  */
-bookingSchema.methods.calculateRefund = function() {
+bookingSchema.methods.calculateEstimatedRefund = function() {
     if (!this.canCancel()) return 0;
-
     if (this.has_cancellation_insurance) return this.total_amount;
 
-    const hoursUntilService = (new Date(this.start_time) - new Date()) / (1000 * 60 * 60);
+    const hoursUntil = (new Date(this.start_time) - new Date()) / (1000 * 60 * 60);
 
     switch (this.cancellation_policy) {
         case 'flexible':
-            return hoursUntilService >= 24 ? this.total_amount : this.total_amount * 0.5;
+            return hoursUntil >= 24 ? this.total_amount : this.total_amount * 0.5;
         case 'moderate':
-            if (hoursUntilService >= 48) return this.total_amount;
-            if (hoursUntilService >= 24) return this.total_amount * 0.75;
+            if (hoursUntil >= 48) return this.total_amount;
+            if (hoursUntil >= 24) return this.total_amount * 0.75;
             return this.total_amount * 0.25;
         case 'strict':
-            if (hoursUntilService >= 72) return this.total_amount * 0.5;
-            return 0;
-        case 'custom':
-            return hoursUntilService >= 48 ? this.total_amount * 0.5 : 0;
+            return hoursUntil >= 72 ? this.total_amount * 0.5 : 0;
         default:
             return 0;
     }
 };
 
 /**
- * Get formatted booking info
+ * Get formatted status
+ */
+bookingSchema.methods.getStatusDisplay = function() {
+    const statusMap = {
+        'pending': 'Pending Confirmation',
+        'confirmed': 'Confirmed',
+        'in_progress': 'In Progress',
+        'completed': 'Completed',
+        'cancelled': 'Cancelled',
+        'rescheduled': 'Rescheduled',
+        'queued': 'In Queue',
+        'no_show': 'No Show'
+    };
+    return statusMap[this.status] || this.status;
+};
+
+/**
+ * Get public booking JSON
  */
 bookingSchema.methods.toPublicJSON = function() {
     return {
-        id: this.booking_id,
-        service_id: this.service_id,
+        booking_id: this.booking_id,
         service_name: this.service_name,
-        provider_id: this.provider_id,
         provider_name: this.provider_name,
-        provider_rating: this.provider_rating,
-        booking_type: this.booking_type,
         status: this.status,
+        status_display: this.getStatusDisplay(),
         booking_date: this.booking_date,
         start_time: this.start_time,
         end_time: this.end_time,
-        address: this.address,
-        address_label: this.address_label,
-        base_price: this.base_price,
-        discount: this.discount,
-        tax_amount: this.tax_amount,
         total_amount: this.total_amount,
-        coupon_code: this.coupon_code,
-        has_cancellation_insurance: this.has_cancellation_insurance,
-        waitlist_position: this.waitlist_position,
-        notes: this.notes,
+        payment_status: this.payment_status,
+        rating: this.rating,
         created_at: this.created_at
     };
 };
@@ -501,7 +551,9 @@ bookingSchema.statics.findByCustomer = function(customerId, options = {}) {
     const query = { customer_id: customerId };
     if (options.status) query.status = options.status;
     if (options.booking_type) query.booking_type = options.booking_type;
-    if (options.from_date) query.booking_date = { $gte: new Date(options.from_date) };
+    if (options.from_date) {
+        query.booking_date = { $gte: new Date(options.from_date) };
+    }
     if (options.to_date) {
         query.booking_date = { ...query.booking_date, $lte: new Date(options.to_date) };
     }
@@ -520,19 +572,42 @@ bookingSchema.statics.findUpcoming = function(customerId) {
 };
 
 /**
- * Find active bookings for a provider on a date
+ * Find active bookings for a slot
  */
-bookingSchema.statics.findProviderBookings = function(providerId, date) {
+bookingSchema.statics.findBySlot = function(slotId, date) {
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
     return this.find({
-        provider_id: providerId,
-        status: { $in: ['confirmed', 'in_progress'] },
-        start_time: { $gte: startOfDay, $lte: endOfDay }
+        slot_id: slotId,
+        booking_date: { $gte: startOfDay, $lte: endOfDay },
+        status: { $in: ['confirmed', 'in_progress', 'pending'] }
     });
+};
+
+/**
+ * Get booking statistics
+ */
+bookingSchema.statics.getStats = async function(query = {}) {
+    const total = await this.countDocuments(query);
+    const completed = await this.countDocuments({ ...query, status: 'completed' });
+    const cancelled = await this.countDocuments({ ...query, status: 'cancelled' });
+
+    const revenue = await this.aggregate([
+        { $match: { ...query, status: { $in: ['completed', 'confirmed'] } } },
+        { $group: { _id: null, total: { $sum: '$total_amount' }, avg: { $avg: '$total_amount' } } }
+    ]);
+
+    return {
+        total_bookings: total,
+        completed_bookings: completed,
+        cancelled_bookings: cancelled,
+        completion_rate: total > 0 ? Math.round((completed / total) * 100) : 0,
+        total_revenue: revenue[0]?.total || 0,
+        average_booking_value: revenue[0] ? Math.round(revenue[0].avg) : 0
+    };
 };
 
 const Booking = mongoose.model('Booking', bookingSchema);
