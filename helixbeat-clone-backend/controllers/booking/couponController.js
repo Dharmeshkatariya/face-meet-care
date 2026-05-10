@@ -7,24 +7,27 @@ class CouponController {
     /**
      * Validate a coupon code
      */
-    async validateCoupon(req, res) {
-        try {
-            const { code, booking_amount, service_id } = req.body;
+   // controllers/booking/couponController.js
 
-            if (!code) {
-                return res.status(400).json({ status: false, message: 'Coupon code is required' });
-            }
+   async validateCoupon(req, res) {
+       try {
+           const { code, booking_amount, service_id } = req.body;
 
-            if (!booking_amount || booking_amount <= 0) {
-                return res.status(400).json({ status: false, message: 'Valid booking amount is required' });
-            }
+           if (!code) {
+               return res.status(400).json({ status: false, message: 'Coupon code is required' });
+           }
 
-            const result = await PriceCalculator.prototype.validateCoupon(code, booking_amount);
-            res.json({ status: true, data: result });
-        } catch (error) {
-            res.status(400).json({ status: false, message: error.message });
-        }
-    }
+           if (!booking_amount || booking_amount <= 0) {
+               return res.status(400).json({ status: false, message: 'Valid booking amount is required' });
+           }
+
+           // ✅ Use different variable names to avoid conflicts
+           const result = PriceCalculator.validateCouponStatic(code, booking_amount);
+           res.json({ status: true, data: result });
+       } catch (error) {
+           res.status(400).json({ status: false, message: error.message });
+       }
+   }
 
     /**
      * Calculate price breakdown

@@ -175,8 +175,8 @@ class PriceCalculator {
             'FESTIVE50': { type: 'fixed', value: 50, minAmount: 200, description: 'Flat ₹50 OFF Festive Special' }
         };
 
-        const code = (code || '').toUpperCase().trim();
-        const coupon = coupons[code];
+       const couponCode = (code || '').toUpperCase().trim(); // ← DIFFERENT NAME
+         const coupon = coupons[couponCode];
 
         if (!coupon) {
             return { code, isValid: false, errorMessage: 'Invalid coupon code. Please check and try again.' };
