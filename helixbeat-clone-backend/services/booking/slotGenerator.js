@@ -247,13 +247,15 @@ class SlotGenerator {
             }
         }
 
-        const peakPrice = isPeak ? Math.round(basePrice * (1 + surcharge / 100)) : null;
-        const effectivePrice = isPeak ? peakPrice : basePrice;
+    const peakPrice = isPeak ? Math.round(basePrice * (1 + surcharge / 100)) : null;
+      const effectivePrice = isPeak ? peakPrice : basePrice;
 
         return {
             basePrice,
             peakPrice,
-            effectivePrice,
+         // ✅ Ensure effectivePrice is always a number
+                 effectivePrice: effectivePrice ?? basePrice,
+
             surcharge_percentage: surcharge,
             isPeak,
             peakLabel
