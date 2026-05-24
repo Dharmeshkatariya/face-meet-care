@@ -302,6 +302,295 @@ app.get('/api/v1/logs', (req, res) => {
   }
 });
 
+// ============================================
+// 🎯 STREAMING ENDPOINTS FOR TESTING
+// Add these to your server.js
+// ============================================
+
+// ========== SSE (Server-Sent Events) ENDPOINTS ==========
+
+// Basic SSE stream
+app.get('/api/v1/stream/sse', (req, res) => {
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+        'X-Accel-Buffering': 'no'
+    });
+
+    let counter = 0;
+    const maxEvents = 100;
+
+    const intervalId = setInterval(() => {
+        counter++;
+
+        const event = {
+            id: counter.toString(),
+            type: counter % 5 === 0 ? 'milestone' : 'update',
+            data: {
+                message: `Event #${counter}`,
+                timestamp: new Date().toISOString(),
+                value: Math.floor(Math.random() * 100),
+                progress: ((counter / maxEvents) * 100).toFixed(1) + '%'
+            }
+        };
+
+        // Send named event
+        res.write(`id: ${counter}\n`);
+        res.write(`event: ${event.type}\n`);
+        res.write(`data: ${JSON.stringify(event.data)}\n\n`);
+
+        if (counter >= maxEvents) {
+            res.write(`id: ${counter + 1}\n`);
+            res.write(`event: done\n`);
+            res.write(`data: {"message": "Stream complete", "totalEvents": ${counter}}\n\n`);
+            res.write(`data: [DONE]\n\n`);
+            clearInterval(intervalId);
+            res.end();
+        }
+    }, 500);
+
+    // Send heartbeat every 15 seconds
+    const heartbeatId = setInterval(() => {
+        res.write(`: heartbeat ${new Date().toISOString()}\n\n`);
+    }, 15000);
+
+    req.on('close', () => {
+        clearInterval(intervalId);
+        clearInterval(heartbeatId);
+        console.log(`SSE client disconnected after ${counter} events`);
+    });
+});
+
+// SSE with custom events
+app.get('/api/v1/stream/sse/notifications', (req, res) => {
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*'
+    });
+
+    let notificationCount = 0;
+
+    const types = ['info', 'success', 'warning', 'error'];
+    const messages = [
+        'New user registered',
+        'Order confirmed',
+        'Payment received',
+        'Low battery warning',
+        'Server load high',
+        'Backup completed',
+        'Update available'
+    ];
+
+    const intervalId = setInterval(() => {
+        notificationCount++;
+
+        const notification = {
+            id: `notif_${Date.now()}`,
+            type: types[notificationCount % types.length],
+            title: `Notification ${notificationCount}`,
+            message: messages[notificationCount % messages.length],
+            read: false,
+            createdAt: new Date().toISOString()
+        };
+
+        res.write(`id: ${notificationCount}\n`);
+        res.write(`event: notification\n`);
+        res.write(`data: ${JSON.stringify(notification)}\n\n`);
+    }, 3000);
+
+    req.on('close', () => {
+        clearInterval(intervalId);
+    });
+});
+
+// SSE with large payload
+app.get('/api/v1/stream/sse/users', (req, res) => {
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*'
+    });
+
+    let batchCount = 0;
+
+    const intervalId = setInterval(() => {
+        batchCount++;
+
+        const users = [];
+        for (let i = 0; i < 5; i++) {
+            users.push({
+                id: (batchCount - 1) * 5 + i + 1,
+                name: `User ${(batchCount - 1) * 5 + i + 1}`,
+                email: `user${(batchCount - 1) * 5 + i + 1}@example.com`,
+                joinedAt: new Date().toISOString()
+            });
+        }
+
+        res.write(`id: ${batchCount}\n`);
+        res.write(`event: users_batch\n`);
+        res.write(`data: ${JSON.stringify(users)}\n\n`);
+
+        if (batchCount >= 20) {
+            res.write(`data: [DONE]\n\n`);
+            clearInterval(intervalId);
+            res.end();
+        }
+    }, 1000);
+
+    req.on('close', () => {
+        clearInterval(intervalId);
+    });
+});
+
+// ========== AI CHAT STREAMING (Simulated OpenAI) ==========
+
+app.post('/api/v1/stream/ai/chat', (req, res) => {
+    const { message } = req.body;
+
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*'
+    });
+
+    const response = `You asked: "${message}". Here's a detailed response about this topic. This is a simulated AI streaming response that demonstrates how token-by-token streaming works. Each token is sent as a separate SSE event, allowing real-time display in the UI.`;
+    const words = response.split(' ');
+    let wordIndex = 0;
+
+    const intervalId = setInterval(() => {
+        if (wordIndex < words.length) {
+            const token = words[wordIndex] + (wordIndex < words.length - 1 ? ' ' : '');
+
+            // OpenAI format
+            const chunk = {
+                id: `chatcmpl-${Date.now()}`,
+                object: 'chat.completion.chunk',
+                created: Math.floor(Date.now() / 1000),
+                model: 'gpt-3.5-turbo',
+                choices: [{
+                    index: 0,
+                    delta: {
+                        content: token
+                    },
+                    finish_reason: wordIndex === words.length - 1 ? 'stop' : null
+                }]
+            };
+
+            res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+            wordIndex++;
+        } else {
+            res.write(`data: [DONE]\n\n`);
+            clearInterval(intervalId);
+            res.end();
+        }
+    }, 80);
+
+    req.on('close', () => {
+        clearInterval(intervalId);
+    });
+});
+
+// ========== CHUNKED TRANSFER ENDPOINT ==========
+
+app.get('/api/v1/stream/chunked/users', (req, res) => {
+    res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Transfer-Encoding': 'chunked',
+        'Access-Control-Allow-Origin': '*'
+    });
+
+    let sent = 0;
+    const totalUsers = 500;
+    const batchSize = 50;
+
+    function sendBatch() {
+        const users = [];
+        for (let i = 0; i < batchSize && sent + i < totalUsers; i++) {
+            users.push({
+                id: sent + i + 1,
+                name: `User ${sent + i + 1}`,
+                email: `user${sent + i + 1}@example.com`,
+                createdAt: new Date().toISOString()
+            });
+        }
+
+        sent += users.length;
+        res.write(JSON.stringify(users) + '\n');
+
+        if (sent < totalUsers) {
+            setTimeout(sendBatch, 100);
+        } else {
+            res.end();
+        }
+    }
+
+    sendBatch();
+});
+
+// ========== WEBSOCKET ENDPOINTS ==========
+
+io.on('connection', (socket) => {
+    console.log(`🔌 Socket connected: ${socket.id}`);
+
+    // Echo messages
+    socket.on('message', (data) => {
+        socket.emit('message', {
+            id: Date.now().toString(),
+            text: data,
+            timestamp: new Date().toISOString(),
+            echo: true
+        });
+    });
+
+    // Join room
+    socket.on('join_room', (room) => {
+        socket.join(room);
+        socket.emit('room_joined', { room });
+        io.to(room).emit('user_joined', { userId: socket.id, room });
+    });
+
+    // Leave room
+    socket.on('leave_room', (room) => {
+        socket.leave(room);
+        socket.emit('room_left', { room });
+    });
+
+    // Room message
+    socket.on('room_message', (data) => {
+        io.to(data.room).emit('room_message', {
+            userId: socket.id,
+            text: data.text,
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    // Typing indicator
+    socket.on('typing', (data) => {
+        socket.to(data.room).emit('typing', {
+            userId: socket.id,
+            isTyping: data.isTyping
+        });
+    });
+
+    socket.on('disconnect', () => {
+        console.log(`🔌 Socket disconnected: ${socket.id}`);
+    });
+});
+
+console.log('✅ Streaming endpoints registered:');
+console.log('   📡 GET /api/v1/stream/sse - Basic SSE');
+console.log('   📡 GET /api/v1/stream/sse/notifications - Notification SSE');
+console.log('   📡 GET /api/v1/stream/sse/users - Batch SSE');
+console.log('   🤖 POST /api/v1/stream/ai/chat - AI Chat Streaming');
+console.log('   📦 GET /api/v1/stream/chunked/users - Chunked Transfer');
+console.log('   🔌 WebSocket on /socket.io/');
+
 console.log('✅ PUBLIC Pagination endpoints registered (NO AUTH REQUIRED):');
 console.log('   📄 GET /api/v1/users - Page-based');
 console.log('   📄 GET /api/v1/posts - Cursor-based');
